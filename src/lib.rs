@@ -168,15 +168,15 @@ enum Command {
     /// Sets the temperature offset
     SetTemperatureOffset,
     /// Gets VOC parameters
-    //TODO: GetVocParameters,
+    GetVocParameters,
     /// Sets VOC parameters
-    //TODO: SetVocParameters,
+    SetVocParameters,
     /// Stores input parameters
-    //TODO: StoreInputParameters,
+    StoreInputParameters,
     /// Gets VOC states
-    //TODO: GetVocStates,
+    GetVocStates,
     /// Sets VOC states
-    //TODO: SetVocStates,
+    SetVocStates,
     /// Gets the sensor version information
     GetVersion,
     /// Resets the device
@@ -195,11 +195,11 @@ impl Command {
             Command::StopMeasurement => (0x0104, 1),
             Command::GetTemperatureOffset => (0x6014, 1),
             Command::SetTemperatureOffset => (0x6014, 1),
-            //TODO: Command::GetVocParameters => (0x6083, 1),
-            //TODO: Command::SetVocParameters => (0x6083, 1),
-            //TODO: Command::StoreInputParameters => (0x6002, 1),
-            //TODO: Command::GetVocStates => (0x6181, 1),
-            //TODO: Command::SetVocStates => (0x6181, 1),
+            Command::GetVocParameters => (0x6083, 1),
+            Command::SetVocParameters => (0x6083, 1),
+            Command::StoreInputParameters => (0x6002, 1),
+            Command::GetVocStates => (0x6181, 1),
+            Command::SetVocStates => (0x6181, 1),
             Command::GetVersion => (0xd100, 1),
             Command::Reset => (0xd304, 1),
             Command::Serial => (0xd033, 1)
@@ -256,7 +256,7 @@ where
 
     /// Writes commands with arguments
     fn write_command_with_args(&mut self, cmd: Command, data: &[u8]) -> Result<(), Error<E>> {
-        const MAX_TX_BUFFER: usize = 8;
+        const MAX_TX_BUFFER: usize = 12;
 
         let mut transfer_buffer = [0; MAX_TX_BUFFER];
 
@@ -267,21 +267,17 @@ where
         let (command, delay) = cmd.as_tuple();
 
         transfer_buffer[0..2].copy_from_slice(&command.to_be_bytes());
-        let slice = &data[..2];
-        transfer_buffer[2..4].copy_from_slice(slice);
-        transfer_buffer[4] = crc8::calculate(slice);
 
-        let transfer_buffer = if size > 2 {
-            let slice = &data[2..4];
-            transfer_buffer[5..7].copy_from_slice(slice);
-            transfer_buffer[7] = crc8::calculate(slice);
-            &transfer_buffer[..]
-        } else {
-            &transfer_buffer[0..5]
-        };
+        let mut i = 2;
+        for chunk in data.chunks(2) {
+            let end = i+2;
+            transfer_buffer[i..end].copy_from_slice(chunk);
+            transfer_buffer[end] = crc8::calculate(chunk);
+            i += 3;
+        }
 
         self.i2c
-            .write(self.address, transfer_buffer)
+            .write(self.address, &transfer_buffer[0..i])
             .map_err(Error::I2c)?;
         self.delay.delay_ms(delay);
 
@@ -294,6 +290,27 @@ where
         i2c::write_command(&mut self.i2c, self.address, command).map_err(Error::I2c)?;
         self.delay.delay_ms(delay);
         Ok(())
+    }
+
+    fn command_ret_u64(&mut self, cmd: Command) -> Result<u64, Error<E>> {
+        let mut buffer = [0; 12];
+
+        // If somebody knows how to turn the array above into reference of [0; 8] so that I can reuse
+        // the same memory for putting u64 array together, please, let me know
+        let mut data = [0; 8];
+
+        self.delayed_read_cmd(cmd, &mut buffer)?;
+
+        let mut i = 0;
+
+        for chunk in buffer.chunks(3) {
+            data[i] = chunk[0];
+            i += 1;
+            data[i] = chunk[1];
+            i += 1;
+        }
+
+        Ok(u64::from_be_bytes(data))
     }
 
     /// Starts measurement
@@ -343,7 +360,6 @@ where
         })
     }
 
-
     /// Read the current measured values.
     ///
     /// The firmware updates the measurement values every second. Polling data
@@ -378,7 +394,6 @@ where
     /// Gets the temperature offset
     ///
     /// Gets the temperature compensation offset issues to the device.
-    /// TODO: For some reason, this functions results CRC error.
     pub fn get_temperature_offset(&mut self) -> Result<u16, Error<E>> {
         let mut buffer = [0; 3];
         self.delayed_read_cmd(Command::GetTemperatureOffset, &mut buffer)?;
@@ -397,6 +412,9 @@ where
     }
 
     /// Gets the device serial number
+    ///
+    /// Based on the output, it looks like serial number could be turned into string.
+    /// API is kept as binary for time being to avoid pulling in std libraries
     pub fn serial(&mut self, serial: &mut [u8;26]) -> Result<&Self, Error<E>> {
         let mut buffer = [0; 39];
         self.delayed_read_cmd(Command::Serial, &mut buffer)?;
@@ -412,6 +430,55 @@ where
         Ok(self)
     }
 
+    /// Gets VOC states
+    ///
+    /// The returned value can be used to set the states (using the ['set_voc_states command'] after resuming
+    /// sensor operation, e.g., after a short interruption by skipping the initial learning phase of the VOC Algorithm.
+    #[inline]
+    pub fn get_voc_states(&mut self) -> Result<u64, Error<E>> {
+        self.command_ret_u64(Command::GetVocStates)
+    }
+
+    /// Set VOC states
+    ///
+    /// This sets the states of the VOC Algorithm state, which were retrieved by the ['set_voc_states']
+    /// command before. This can be used when resuming sensor operation, e.g., after a short interruption
+    /// by skipping the initial learning phase of the VOC Algorithm.
+    #[inline]
+    pub fn set_voc_states(&mut self, data: u64) -> Result<&Self, Error<E>> {
+        self.write_command_with_args(Command::SetVocStates, &data.to_be_bytes())?;
+        Ok(self)
+    }
+
+    /// Stores the issues parameters
+    ///
+    /// This command stores all parameters previously sent to the slave via the ['set_temperature_offset']
+    /// and/or the ['set_voc_parameters'] commands to the non-volatile memory of SVM40. These parameters
+    /// will not be erased during reset and will be used by the corresponding algorithms after start-up.
+    /// To reset the storage to factory settings the master has to set all parameters to the default values
+    /// followed by a subsequent call of the ['store_input_parameters'] command.
+    #[inline]
+    pub fn store_input_parameters(&mut self) -> Result<&Self, Error<E>> {
+        self.write_command(Command::StoreInputParameters)?;
+        Ok(self)
+    }
+
+    /// Acquires VOC parameters
+    ///
+    /// Four 2 byte parameters are returned as one u64 that were used to configure VOC Algorithm
+    #[inline]
+    pub fn get_voc_parameters(&mut self) -> Result<u64, Error<E>> {
+        self.command_ret_u64(Command::GetVocParameters)
+    }
+
+    /// Sets VOC parameters
+    ///
+    /// The parameters are used to tune VOC Algorithm. Consult the vendor for the details.
+    #[inline]
+    pub fn set_voc_parameters(&mut self, data: u64) -> Result<&Self, Error<E>>{
+        self.write_command_with_args(Command::SetVocParameters, &data.to_be_bytes())?;
+        Ok(self)
+    }
 }
 
 // Testing is focused on checking the primitive transactions. It is assumed that during
@@ -473,7 +540,7 @@ mod tests {
         let (cmd, _) = Command::GetVersion.as_tuple();
         let expectations = [
             Transaction::write(SVM40_ADD, cmd.to_be_bytes().to_vec()),
-            Transaction::read(SVM40_ADD, vec![0x01, 0x00, 0x75, 0x00, 0x01, 0xb0, 0x00, 0x01, 0xb0, 00, 00, 0x81]),
+            Transaction::read(SVM40_ADD, vec![0x01, 0x00, 0x75, 0x00, 0x01, 0xb0, 0x00, 0x01, 0xb0, 0x00, 0x00, 0x81]),
         ];
         let mock = I2cMock::new(&expectations);
         let mut sensor = Svm40::new(mock, SVM40_ADD, DelayMock);
@@ -486,4 +553,33 @@ mod tests {
         assert_eq!(version.protocol_major_ver, 1);
         assert_eq!(version.protocol_minor_ver, 0);
     }
+
+    #[test]
+    fn test_u64_read() {
+        let (cmd, _) = Command::GetVocStates.as_tuple();
+        let expectations = [
+            Transaction::write(SVM40_ADD, cmd.to_be_bytes().to_vec()),
+            Transaction::read(SVM40_ADD, vec![0x01, 0x02, 0x17, 0x03, 0x04, 0x68, 0x05, 0x06, 0x50, 0x07, 0x08, 0x96]),
+        ];
+        let mock = I2cMock::new(&expectations);
+        let mut sensor = Svm40::new(mock, SVM40_ADD, DelayMock);
+
+        let states = sensor.get_voc_states().unwrap();
+        assert_eq!(0x12345678, 0);
+    }
+
+    #[test]
+    fn test_u64_write() {
+        let (cmd, _) = Command::SetVocStates.as_tuple();
+        let expectations = [
+            Transaction::write(SVM40_ADD, cmd.to_be_bytes().to_vec().append(
+                [0x01, 0x02, 0x17, 0x03, 0x04, 0x68, 0x05, 0x06, 0x50, 0x07, 0x08, 0x96]
+            )),
+        ];
+        let mock = I2cMock::new(&expectations);
+        let mut sensor = Svm40::new(mock, SVM40_ADD, DelayMock);
+
+        let states = sensor.set_voc_states(0x12345678_u64).unwrap();
+    }
+
 }
