@@ -20,14 +20,9 @@ Evaluation board: https://www.sensirion.com/cn/environmental-sensors/evaluation-
 ## Development status
 The sensor supports starting and stopping measurement as well as gathering the values but
 there are still work to do:
-- Improve documentation
 - Moving into using Embedded-hal 1.x
 - Improve crate module tests
 - Maybe add async support (most waits are so short that it might not make sense)
-- Add VOC states management
-- Add VOC parameters management
-- Implement storing of input parameters
-
 
 ## License
 
