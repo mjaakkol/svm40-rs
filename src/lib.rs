@@ -256,7 +256,7 @@ where
 
     /// Writes commands with arguments
     fn write_command_with_args(&mut self, cmd: Command, data: &[u8]) -> Result<(), Error<E>> {
-        const MAX_TX_BUFFER: usize = 12;
+        const MAX_TX_BUFFER: usize = 14; //cmd (2 bytes) + max args (12 bytes)
 
         let mut transfer_buffer = [0; MAX_TX_BUFFER];
 
@@ -565,21 +565,22 @@ mod tests {
         let mut sensor = Svm40::new(mock, SVM40_ADD, DelayMock);
 
         let states = sensor.get_voc_states().unwrap();
-        assert_eq!(0x12345678, 0);
+        println!("States:{:x}", states);
+        assert_eq!(0x102030405060708, states);
     }
 
     #[test]
     fn test_u64_write() {
         let (cmd, _) = Command::SetVocStates.as_tuple();
+        let mut data = cmd.to_be_bytes().to_vec();
+        data.append(&mut vec![0x01, 0x02, 0x17, 0x03, 0x04, 0x68, 0x05, 0x06, 0x50, 0x07, 0x08, 0x96]);
         let expectations = [
-            Transaction::write(SVM40_ADD, cmd.to_be_bytes().to_vec().append(
-                [0x01, 0x02, 0x17, 0x03, 0x04, 0x68, 0x05, 0x06, 0x50, 0x07, 0x08, 0x96]
-            )),
+            Transaction::write(SVM40_ADD, data),
         ];
         let mock = I2cMock::new(&expectations);
         let mut sensor = Svm40::new(mock, SVM40_ADD, DelayMock);
 
-        let states = sensor.set_voc_states(0x12345678_u64).unwrap();
+        sensor.set_voc_states(0x102030405060708_u64).unwrap();
     }
 
 }
