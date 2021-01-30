@@ -4,6 +4,7 @@ Platform agnostic Rust device driver for Sensirion SVM40 development board
 [![Build status][workflow-badge]][workflow]
 [![Crates.io Version][crates-io-badge]][crates-io]
 [![Crates.io Downloads][crates-io-download-badge]][crates-io-download]
+[![Documentation](https://docs.rs/svm40/badge.svg)](https://docs.rs/svm40)
 ![No Std][no-std-badge]
 
 Platform agnostic Rust driver for Sensirion SVM40 device with gas, temperature and humidity sensors 
@@ -18,11 +19,9 @@ VOC (*Total Volatile Organic Compounds*)
 Evaluation board: https://www.sensirion.com/cn/environmental-sensors/evaluation-kit-sek-svm40/
 
 ## Development status
-The sensor supports starting and stopping measurement as well as gathering the values but
-there are still work to do:
-- Moving into using Embedded-hal 1.x
-- Improve crate module tests
-- Maybe add async support (most waits are so short that it might not make sense)
+
+The sensor development is complete. The next major revision is done when moved into using new
+embedded-hal.
 
 ## License
 
