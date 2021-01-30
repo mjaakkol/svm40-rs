@@ -87,19 +87,19 @@ use sensirion_i2c::{crc8, i2c};
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Signals {
     /// VOC algorithm output with a scaling value of 10.
-    pub voc_index: u16,
+    pub voc_index: i16,
     /// Compensated ambient humidity in %RH with a scaling factor of 100.
-    pub relative_humidity: u16,
+    pub relative_humidity: i16,
     /// Compensated ambient temperature in degree celsius with a scaling factor of 200.
-    pub temperature: u16,
+    pub temperature: i16,
 }
 
 impl Signals {
     fn parse(data: &[u8]) -> Self {
         Signals {
-            voc_index: u16::from_be_bytes([data[0], data[1]]),
-            relative_humidity: u16::from_be_bytes([data[6], data[7]]),
-            temperature: u16::from_be_bytes([data[3], data[4]]),
+            voc_index: i16::from_be_bytes([data[0], data[1]]),
+            relative_humidity: i16::from_be_bytes([data[3], data[4]]),
+            temperature: i16::from_be_bytes([data[6], data[7]]),
         }
     }
 }
@@ -109,11 +109,11 @@ impl Signals {
 pub struct RawSignals {
     pub standard: Signals,
     /// Raw VOC output ticks as read from the SGP sensor.
-    pub voc_ticks_raw: u16,
+    pub voc_ticks_raw: i16,
     /// Uncompensated raw humidity in %RH as read from the SHT40 with a scaling factor of 100.
-    pub uncompensated_relative_humidity: u16,
+    pub uncompensated_relative_humidity: i16,
     /// Uncompensated raw temperature in degrees celsius as read from the SHT40 with a scaling of 200.
-    pub uncompensated_temperature: u16,
+    pub uncompensated_temperature: i16,
 }
 
 impl RawSignals {
@@ -122,9 +122,9 @@ impl RawSignals {
 
         RawSignals {
             standard,
-            voc_ticks_raw: u16::from_be_bytes([data[9], data[10]]),
-            uncompensated_relative_humidity: u16::from_be_bytes([data[15], data[16]]),
-            uncompensated_temperature: u16::from_be_bytes([data[12], data[13]]),
+            voc_ticks_raw: i16::from_be_bytes([data[9], data[10]]),
+            uncompensated_relative_humidity: i16::from_be_bytes([data[12], data[13]]),
+            uncompensated_temperature: i16::from_be_bytes([data[15], data[16]]),
         }
     }
 }
