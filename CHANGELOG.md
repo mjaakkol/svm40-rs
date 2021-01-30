@@ -36,3 +36,5 @@ the device firmware into 2.2.
 Initial release to crates.io. The crate moves into 0.1.x versioning after embedded-hal change.
 
 [0.0.2]: https://github.com/mjaakkol/svm40-rs/compare/v0.0.1...v0.0.2
+
+[i5]: https://github.com/mjaakkol/svm40-rs/pull/5
